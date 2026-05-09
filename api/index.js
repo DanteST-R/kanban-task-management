@@ -18,12 +18,57 @@ const pool = new Pool({
   }
 });
 
-// Helper para executar queries no Postgres (mantendo interface similar ao sqlite3)
+// Helper para executar queries no Postgres
 const db = {
   get: (query, params) => pool.query(query, params).then(res => res.rows[0]),
   all: (query, params) => pool.query(query, params).then(res => res.rows),
   run: (query, params) => pool.query(query, params)
 };
+
+// Inicialização das tabelas (PostgreSQL)
+const initDB = async () => {
+  try {
+    await db.run(`CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      name TEXT,
+      email TEXT UNIQUE,
+      password_hash TEXT,
+      avatar_url TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await db.run(`CREATE TABLE IF NOT EXISTS tags (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id),
+      name TEXT,
+      color TEXT
+    )`);
+    await db.run(`CREATE TABLE IF NOT EXISTS tasks (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id),
+      title TEXT,
+      description TEXT,
+      status TEXT DEFAULT 'TODO',
+      priority TEXT DEFAULT 'MEDIUM',
+      due_date TIMESTAMP,
+      category_id INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`);
+    await db.run(`CREATE TABLE IF NOT EXISTS task_tags (
+      task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+      tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
+      PRIMARY KEY(task_id, tag_id)
+    )`);
+    console.log("Database tables initialized");
+  } catch (err) {
+    console.error("Error initializing database:", err);
+  }
+};
+
+// Middleware para garantir que o banco está pronto
+app.use(async (req, res, next) => {
+  await initDB();
+  next();
+});
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
